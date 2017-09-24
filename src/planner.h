@@ -27,7 +27,6 @@ class Planner
     double prev_path_end_d_;
     // Sensor Fusion Data, a list of all other cars on the same side of the road.
     std::vector<SensorFusionItem> sensor_fusion_;
-
   public:
     Planner(
         const Map* _map,
@@ -51,6 +50,16 @@ class Planner
     virtual ~Planner();
 
 private:
+    void GenerateSpline(
+        std::vector<double> ref_points_x, 
+        std::vector<double> ref_points_y,
+        int nPointsToGenerate,        
+        double x_origin,
+        double y_origin,
+        double yaw,
+        std::vector<double>& spline_x, 
+        std::vector<double>& spline_y
+    ) const;
 
     void UnshiftUnrotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const;
     void ShiftRotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const;

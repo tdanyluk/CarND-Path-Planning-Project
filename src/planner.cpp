@@ -50,78 +50,87 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) con
 {
     path_x = {};
     path_y = {};
+
+    std::copy(prev_path_x_.begin(), prev_path_x_.end(), std::back_inserter(path_x));
+    std::copy(prev_path_y_.begin(), prev_path_y_.end(), std::back_inserter(path_y));
     
-    std::vector<double> pts_x;
-    std::vector<double> pts_y;
+    double prev_x = 0;
+    double prev_y = 0;
+    double origin_x = 0;
+    double origin_y = 0;
+    double origin_yaw = 0;
 
-    double ref_x = car_x_;
-    double ref_y = car_y_;
-    double ref_yaw = util::degToRad(car_yaw_);
-
-    int prev_size = (int)prev_path_x_.size();
-
-    if(prev_size < 2) {
-        double prev_car_x = ref_x - std::cos(ref_yaw);
-        double prev_car_y = ref_y - std::sin(ref_yaw);
-
-        pts_x.push_back(prev_car_x);
-        pts_x.push_back(ref_x);
-        
-        pts_y.push_back(prev_car_y);
-        pts_y.push_back(ref_y);
+    double prev_path_size = (int)prev_path_x_.size();
+    if(prev_path_size < 2) {
+        prev_x = car_x_ - std::cos(car_yaw_);
+        prev_y = car_y_ - std::sin(car_yaw_);
+        origin_x = car_x_;
+        origin_y = car_y_;
+        origin_yaw = car_yaw_;
     } else {
-        ref_x = prev_path_x_[prev_size-1];
-        ref_y = prev_path_y_[prev_size-1];
-
-        double ref_x_prev = prev_path_x_[prev_size-2];
-        double ref_y_prev = prev_path_y_[prev_size-2];
-
-        pts_x.push_back(ref_x_prev);
-        pts_x.push_back(ref_x);
-        
-        pts_y.push_back(ref_y_prev);
-        pts_y.push_back(ref_y);
-
-        ref_yaw = std::atan2(ref_y-ref_y_prev, ref_x-ref_x_prev);
+        prev_x = prev_path_x_[prev_path_size-2];
+        prev_y = prev_path_y_[prev_path_size-2];
+        origin_x = prev_path_x_[prev_path_size-1];
+        origin_y = prev_path_y_[prev_path_size-1];
+        origin_yaw = std::atan2(origin_y-prev_y, origin_x-prev_x);
     }
 
-    PointSD frenet = map_->GetSD({ref_x, ref_y}, ref_yaw);
-    auto ref_s = frenet.s;
-    auto ref_d = frenet.d;
+    std::vector<double> ref_points_x;
+    std::vector<double> ref_points_y;
 
-    int lane = 1;
-    PointXY next_wp0 = map_->GetXY({ref_s + 30, 2.0+4.0*lane});
-    PointXY next_wp1 = map_->GetXY({ref_s + 60, 2.0+4.0*lane});
-    PointXY next_wp2 = map_->GetXY({ref_s + 90, 2.0+4.0*lane});
+    ref_points_x.push_back(prev_x);
+    ref_points_x.push_back(origin_x);
+
+    ref_points_y.push_back(prev_y);
+    ref_points_y.push_back(origin_y);
+
+    const int lane = 1;    
+    PointSD origin_sd = map_->GetSD({origin_x, origin_y}, origin_yaw);
+    PointXY ref_p0 = map_->GetXY({origin_sd.s + 30, 2.0 + 4.0 * lane}); // FIXME magic number
+    PointXY ref_p1 = map_->GetXY({origin_sd.s + 60, 2.0 + 4.0 * lane}); // FIXME magic number
+    PointXY ref_p2 = map_->GetXY({origin_sd.s + 90, 2.0 + 4.0 * lane}); // FIXME magic number
     
-    pts_x.push_back(next_wp0.x);
-    pts_x.push_back(next_wp1.x);
-    pts_x.push_back(next_wp2.x);
+    ref_points_x.push_back(ref_p0.x);
+    ref_points_x.push_back(ref_p1.x);
+    ref_points_x.push_back(ref_p2.x);
 
-    pts_y.push_back(next_wp0.y);
-    pts_y.push_back(next_wp1.y);
-    pts_y.push_back(next_wp2.y);
+    ref_points_y.push_back(ref_p0.y);
+    ref_points_y.push_back(ref_p1.y);
+    ref_points_y.push_back(ref_p2.y);
 
-    UnshiftUnrotate(pts_x, pts_y, ref_x, ref_y, ref_yaw);
-    
+    std::vector<double> spline_x;
+    std::vector<double> spline_y;
+    int nPointsToGenerate = std::max(50-(int)path_x.size(), 1); // FIXME magic number
+    GenerateSpline(ref_points_x, ref_points_y, nPointsToGenerate, origin_x, origin_y, origin_yaw, spline_x, spline_y);
+
+    std::copy(spline_x.begin(), spline_x.end(), std::back_inserter(path_x));
+    std::copy(spline_y.begin(), spline_y.end(), std::back_inserter(path_y));
+}
+
+void Planner::GenerateSpline(
+    std::vector<double> ref_points_x, 
+    std::vector<double> ref_points_y,
+    int nPointsToGenerate,
+    double x_origin,
+    double y_origin,
+    double yaw,
+    std::vector<double>& spline_x, 
+    std::vector<double>& spline_y) const 
+{
+    spline_x = {};
+    spline_y = {};
+
+    UnshiftUnrotate(ref_points_x, ref_points_y, x_origin, y_origin, yaw);
+
     tk::spline s;
-
-    s.set_points(pts_x, pts_y);
-
-    for(int i = 0; i<(int)prev_path_x_.size(); i++)
-    {
-        path_x.push_back(prev_path_x_[i]);
-        path_y.push_back(prev_path_y_[i]);
-    }
+    s.set_points(ref_points_x, ref_points_y);
 
     double target_x = 30;
     double target_y = s(target_y);
     double target_dist = util::distance(0, 0, target_x, target_y);
     double N =  points_per_sec_ * target_dist / target_speed_;
 
-    std::vector<double> spline_x;
-    std::vector<double> spline_y;
-    for(int i = 0; i<=50-prev_size; i++) //
+    for(int i = 0; i<=nPointsToGenerate; i++) //
     {
         double x = (i + 1) * target_x / N;
         double y = s(x);
@@ -129,9 +138,7 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) con
         spline_y.push_back(y);
     }
 
-    ShiftRotate(spline_x, spline_y, ref_x, ref_y, ref_yaw);
-    std::copy(spline_x.begin(), spline_x.end(), std::back_inserter(path_x));
-    std::copy(spline_y.begin(), spline_y.end(), std::back_inserter(path_y));
+    ShiftRotate(spline_x, spline_y, x_origin, y_origin, yaw);
 }
 
 void Planner::UnshiftUnrotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const
@@ -159,4 +166,3 @@ void Planner::ShiftRotate(std::vector<double>& xs, std::vector<double>& ys, doub
         ys[i] = y_origin + x * std::sin(yaw) + y * std::cos(yaw);
     }
 }
-
