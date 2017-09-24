@@ -1,0 +1,3 @@
+1. If the current lane is not clear then I try changing lanes to an adjacent clear lane, or slow down if there is none (planner.cpp: 41-57).
+2. The path is always added to the end of the previous path (the previous path is extended until we get 50 points).
+3. The path points are generated on a spline consisting of the last 2 points of the previous path and the points 30, 60 and 90 meters in front of the car in the target lane. The choice of the target lane is described in 1. If there are less then 2 points remaining from the previous path then the current point, and a generated previous point is used in stead of them (planner.cpp: 72-76).
