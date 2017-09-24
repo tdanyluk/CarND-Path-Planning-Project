@@ -27,7 +27,7 @@ class Map {
     PointXY GetXY(const PointSD& sd) const;
     double NormalizeS(double s) const;
     bool InInterval(double s, double from, double to) const;
-
+    bool IsBehind(double a, double b) const;
   private:
     int ClosestWaypoint(const PointXY& xy) const;
     int NextWaypoint(const PointXY& xy, double theta) const;

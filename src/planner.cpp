@@ -38,16 +38,17 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
     path_x = {};
     path_y = {};
 
-    bool danger = IsThereACarInFrontOfUs(current_target_lane_);
+    bool danger = IsThereACarInFrontOfUs(current_target_lane_, true);
     if(danger) {
-        if(current_target_lane_ >= 1 && !IsThereACarInFrontOfUs(current_target_lane_ - 1, true))
+        if(current_target_lane_ >= 1 && !IsThereACarInFrontOfUs(current_target_lane_ - 1, false))
         {
             current_target_lane_ -= 1;
         }
-        else if(current_target_lane_ <= 1 && !IsThereACarInFrontOfUs(current_target_lane_ + 1, true))
+        else if(current_target_lane_ <= 1 && !IsThereACarInFrontOfUs(current_target_lane_ + 1, false))
         {
             current_target_lane_ += 1;
-        } else 
+        } 
+        else 
         {
             current_target_speed_ -= 0.1; //m/s
         }
@@ -55,7 +56,7 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
         current_target_speed_ += 0.1;
     }
 
-    current_target_speed_ = std::max(current_target_speed_, 0.1); // 
+    current_target_speed_ = std::max(current_target_speed_, 0.1);
 
     std::copy(prev_path_.x.begin(), prev_path_.x.end(), std::back_inserter(path_x));
     std::copy(prev_path_.y.begin(), prev_path_.y.end(), std::back_inserter(path_y));
@@ -112,9 +113,9 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
     std::copy(spline_y.begin(), spline_y.end(), std::back_inserter(path_y));
 }
 
-bool Planner::IsThereACarInFrontOfUs(int lane, bool strict) const
+bool Planner::IsThereACarInFrontOfUs(int lane, bool is_current_lane) const
 {
-    double origin_s = prev_path_.size() > 0 ? prev_path_.end_s : car_.s;
+    double predicted_s = prev_path_.size() > 0 ? prev_path_.end_s : car_.s;
 
     for(const SensorFusionItem& item: sensor_fusion_)
     {
@@ -123,9 +124,9 @@ bool Planner::IsThereACarInFrontOfUs(int lane, bool strict) const
             double other_car_speed = std::sqrt(item.vx * item.vx + item.vy * item.vy);
             double other_car_s = item.s; 
             // project to future
-            other_car_s += (double)prev_path_.size() * other_car_speed / points_per_sec_;
-            double safety_zone = strict ? 10 : 0;
-            if(map_->InInterval(other_car_s, origin_s - safety_zone, origin_s + 30))
+            double other_car_predicted_s = other_car_s + (double)prev_path_.size() * other_car_speed / points_per_sec_;
+            if(!(is_current_lane && map_->IsBehind(other_car_s, car_.s))
+                && map_->InInterval(other_car_predicted_s, predicted_s - 20, predicted_s + 30))
             {
                 return true;
             }

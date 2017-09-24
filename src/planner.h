@@ -66,7 +66,7 @@ public:
     virtual ~Planner();
 
 private:
-    bool IsThereACarInFrontOfUs(int lane, bool strict = false) const;
+    bool IsThereACarInFrontOfUs(int lane, bool is_current_lane) const;
 
     void GenerateSpline(
         std::vector<double> ref_points_x, 

@@ -160,6 +160,11 @@ bool Map::InInterval(double s, double from, double to) const
     }
 }
 
+bool Map::IsBehind(double a, double b) const 
+{
+    return NormalizeS(b-a) < max_s_ / 2;
+}
+
 int Map::ClosestWaypoint(const PointXY& xy) const
 {
     const auto& maps_x = map_waypoints_x_;
