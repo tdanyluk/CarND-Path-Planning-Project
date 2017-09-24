@@ -66,6 +66,8 @@ int main()
 					// j[1] is the data JSON object
 					Planner planner(
 						&map,
+						util::milesPerHourToMetersPerSecond(49.5),
+						50,
 						j[1]["x"],
 						j[1]["y"],
 						j[1]["s"],

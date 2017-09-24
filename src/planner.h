@@ -12,6 +12,8 @@ struct SensorFusionItem {
 class Planner
 {
     const Map *map_;
+    double target_speed_;
+    int points_per_sec_;
 
     double car_x_; // meter
     double car_y_;
@@ -29,6 +31,8 @@ class Planner
   public:
     Planner(
         const Map* _map,
+        double _target_speed, // m/s
+        int _points_per_sec,
         double _car_x,
         double _car_y,
         double _car_s,
@@ -45,6 +49,11 @@ class Planner
     void Plan(std::vector<double>& path_x, std::vector<double>& path_y) const;
 
     virtual ~Planner();
+
+private:
+
+    void UnshiftUnrotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const;
+    void ShiftRotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const;
 };
 
 #endif //_PLANNER_H

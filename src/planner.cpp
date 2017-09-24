@@ -1,6 +1,6 @@
 #include "planner.h"
 
-#include <cmath>
+#include <algorithm>
 #include "spline.h"
 #include "util.h"
 #include "map.h"
@@ -8,6 +8,8 @@
 
 Planner::Planner(
     const Map* _map,
+    double _target_speed,    
+    int _points_per_sec,        
     double _car_x,
     double _car_y,
     double _car_s,
@@ -20,6 +22,8 @@ Planner::Planner(
     double _prev_path_end_d,
     const std::vector<std::vector<double>>& _sensor_fusion)
 : map_(_map)
+, target_speed_(_target_speed)
+, points_per_sec_(_points_per_sec)
 , car_x_(_car_x)
 , car_y_(_car_y)
 , car_s_(_car_s)
@@ -36,6 +40,10 @@ Planner::Planner(
     for(const std::vector<double>& item : _sensor_fusion) {
         sensor_fusion_.push_back({(int)item[0], item[1], item[2], item[3], item[4], item[5], item[6]});
     }
+}
+
+Planner::~Planner(){
+    // Empty
 }
 
 void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) const
@@ -94,14 +102,8 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) con
     pts_y.push_back(next_wp1.y);
     pts_y.push_back(next_wp2.y);
 
-    for(int i = 0; i<pts_x.size(); i++){
-        double shift_x = pts_x[i] - ref_x;
-        double shift_y = pts_y[i] - ref_y;
-
-        pts_x[i] = shift_x*std::cos(-ref_yaw)-shift_y*std::sin(-ref_yaw);
-        pts_y[i] = shift_x*std::sin(-ref_yaw)+shift_y*std::cos(-ref_yaw);
-    }
-
+    UnshiftUnrotate(pts_x, pts_y, ref_x, ref_y, ref_yaw);
+    
     tk::spline s;
 
     s.set_points(pts_x, pts_y);
@@ -114,34 +116,47 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) con
 
     double target_x = 30;
     double target_y = s(target_y);
-    double target_dist = util::distance(0,0,target_x, target_y);
-    double ref_vel = 49.5;
-    double N = target_dist/(0.02*ref_vel/2.24); // 2.24: miles/h to meters/s, every 0.02 sec the car moves
+    double target_dist = util::distance(0, 0, target_x, target_y);
+    double N =  points_per_sec_ * target_dist / target_speed_;
 
-    double x_add_on = 0;
-    for(int i = 0; i<=50-prev_size; i++)//
+    std::vector<double> spline_x;
+    std::vector<double> spline_y;
+    for(int i = 0; i<=50-prev_size; i++) //
     {
-        double x_point = x_add_on + target_x/N;
-        double y_point = s(x_point);
+        double x = (i + 1) * target_x / N;
+        double y = s(x);
+        spline_x.push_back(x);
+        spline_y.push_back(y);
+    }
 
-        x_add_on = x_point;
+    ShiftRotate(spline_x, spline_y, ref_x, ref_y, ref_yaw);
+    std::copy(spline_x.begin(), spline_x.end(), std::back_inserter(path_x));
+    std::copy(spline_y.begin(), spline_y.end(), std::back_inserter(path_y));
+}
 
-        double x_ref = x_point;
-        double y_ref = y_point;
+void Planner::UnshiftUnrotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const
+{
+    assert(xs.size() == ys.size());
 
-        x_point = x_ref * std::cos(ref_yaw) - y_ref*std::sin(ref_yaw);
-        y_point = x_ref * std::sin(ref_yaw) + y_ref*std::cos(ref_yaw);
+    for(int i = 0; i<(int)xs.size(); i++){
+        double shift_x = xs[i] - x_origin;
+        double shift_y = ys[i] - y_origin;
 
-        x_point += ref_x;
-        y_point += ref_y;
-
-        path_x.push_back(x_point);
-        path_y.push_back(y_point);
+        xs[i] = shift_x * std::cos(-yaw) - shift_y * std::sin(-yaw);
+        ys[i] = shift_x * std::sin(-yaw) + shift_y * std::cos(-yaw);
     }
 }
 
+void Planner::ShiftRotate(std::vector<double>& xs, std::vector<double>& ys, double x_origin, double y_origin, double yaw) const
+{
+    assert(xs.size() == ys.size());
+    
+    for(int i = 0; i<(int)xs.size(); i++){
+        double x = xs[i];
+        double y = ys[i];
 
-Planner::~Planner(){
-    // Empty
+        xs[i] = x_origin + x * std::cos(yaw) - y * std::sin(yaw);
+        ys[i] = y_origin + x * std::sin(yaw) + y * std::cos(yaw);
+    }
 }
 
