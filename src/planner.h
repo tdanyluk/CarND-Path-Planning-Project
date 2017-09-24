@@ -66,7 +66,7 @@ public:
     virtual ~Planner();
 
 private:
-    bool IsLaneClear(int lane, bool is_current_lane) const;
+    bool IsLaneClear(int lane) const;
 
     void GenerateSpline(
         std::vector<double> ref_points_x, 

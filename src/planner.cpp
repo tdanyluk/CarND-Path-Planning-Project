@@ -5,7 +5,6 @@
 #include "util.h"
 #include "map.h"
 
-
 Planner::Planner(
     const Map* _map,
     double _speed_limit,
@@ -38,13 +37,13 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
     path_x = {};
     path_y = {};
 
-    bool danger = !IsLaneClear(current_target_lane_, true);
+    bool danger = !IsLaneClear(current_target_lane_);
     if(danger) {
-        if(current_target_lane_ >= 1 && IsLaneClear(current_target_lane_ - 1, false))
+        if(current_target_lane_ >= 1 && IsLaneClear(current_target_lane_ - 1))
         {
             current_target_lane_ -= 1;
         }
-        else if(current_target_lane_ <= 1 && IsLaneClear(current_target_lane_ + 1, false))
+        else if(current_target_lane_ <= 1 && IsLaneClear(current_target_lane_ + 1))
         {
             current_target_lane_ += 1;
         } 
@@ -113,7 +112,7 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
     std::copy(spline_y.begin(), spline_y.end(), std::back_inserter(path_y));
 }
 
-bool Planner::IsLaneClear(int lane, bool is_current_lane) const
+bool Planner::IsLaneClear(int lane) const
 {
     double predicted_s = prev_path_.size() > 0 ? prev_path_.end_s : car_.s;
 
@@ -125,8 +124,7 @@ bool Planner::IsLaneClear(int lane, bool is_current_lane) const
             double other_car_s = item.s; 
             // project to future
             double other_car_predicted_s = other_car_s + (double)prev_path_.size() * other_car_speed / points_per_sec_;
-            if(!(is_current_lane && map_->IsBehind(other_car_s, car_.s))
-                && map_->InInterval(other_car_predicted_s, predicted_s - 30, predicted_s + 30))
+            if(map_->InInterval(other_car_predicted_s, predicted_s - 10, predicted_s + 30))
             {
                 return false;
             }
