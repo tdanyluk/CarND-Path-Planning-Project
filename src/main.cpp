@@ -43,10 +43,9 @@ int main()
 	// double max_s = 6945.554;
 
 	Map map("../data/highway_map.csv");
-	double cts = 0;
-	int ctl = 1;
+	Planner planner(&map, util::milesPerHourToMetersPerSecond(49.5), 50, 0, 1);
 
-	h.onMessage([&map, &cts, &ctl](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+	h.onMessage([&planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
 		// "42" at the start of the message means there's a websocket message event.
 		// The 4 signifies a websocket message
 		// The 2 signifies a websocket event
@@ -66,32 +65,37 @@ int main()
 				if (event == "telemetry")
 				{
 					// j[1] is the data JSON object
-					Planner planner(
-						&map,
-						util::milesPerHourToMetersPerSecond(49.5),
-						50,
+
+					CarData car_data {
 						j[1]["x"],
 						j[1]["y"],
 						j[1]["s"],
 						j[1]["d"],
 						util::degToRad(j[1]["yaw"]),
-						j[1]["speed"],
+						util::milesPerHourToMetersPerSecond(j[1]["speed"])
+					};
+
+					PrevPathData prev_path_data {
 						j[1]["previous_path_x"],
 						j[1]["previous_path_y"],
 						j[1]["end_path_s"],
-						j[1]["end_path_d"],
-						j[1]["sensor_fusion"]
-					);
+						j[1]["end_path_d"]
+					};
 
-					planner.current_target_speed_ = cts;
-					planner.current_target_lane_ = ctl;
+					std::vector<SensorFusionItem> sensor_fusion;
+					{
+						std::vector<std::vector<double>> sensor_fusion_tmp = j[1]["sensor_fusion"];
+						sensor_fusion.reserve(sensor_fusion_tmp.size());
+						for(const std::vector<double>& v: sensor_fusion_tmp) {
+							sensor_fusion.push_back({(int)v[0], v[1], v[2], v[3], v[4], v[5], v[6]});
+						}
+					}
+					
+					planner.SetData(car_data, prev_path_data, sensor_fusion);
 
 					vector<double> next_x_vals;
 					vector<double> next_y_vals;
 					planner.Plan(next_x_vals, next_y_vals);
-
-					cts = planner.current_target_speed_;
-					ctl = planner.current_target_lane_;
 
 					// Define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 					json msgJson;

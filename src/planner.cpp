@@ -8,44 +8,29 @@
 
 Planner::Planner(
     const Map* _map,
-    double _max_allowed_speed,    
-    int _points_per_sec,        
-    double _car_x,
-    double _car_y,
-    double _car_s,
-    double _car_d,
-    double _car_yaw,
-    double _car_speed,
-    const std::vector<double>& _prev_path_x,
-    const std::vector<double>& _prev_path_y,
-    double _prev_path_end_s,
-    double _prev_path_end_d,
-    const std::vector<std::vector<double>>& _sensor_fusion)
+    double _speed_limit,
+    int _points_per_sec,
+    double _current_target_speed,
+    int _current_target_lane)
 : map_(_map)
-, max_allowed_speed_(_max_allowed_speed)
+, speed_limit_(_speed_limit)
 , points_per_sec_(_points_per_sec)
-, car_x_(_car_x)
-, car_y_(_car_y)
-, car_s_(_car_s)
-, car_d_(_car_d)
-, car_yaw_(_car_yaw)
-, car_speed_(_car_speed)
-, prev_path_x_(_prev_path_x)
-, prev_path_y_(_prev_path_y)
-, prev_path_end_s_(_prev_path_end_s)
-, prev_path_end_d_(_prev_path_end_d)
+, current_target_speed_(_current_target_speed)
+, current_target_lane_(_current_target_lane)
+, car_()
+, prev_path_()
 , sensor_fusion_()
-, current_target_speed_(0)
-, current_target_lane_(1)
-{
-    sensor_fusion_.reserve(_sensor_fusion.size());
-    for(const std::vector<double>& item : _sensor_fusion) {
-        sensor_fusion_.push_back({(int)item[0], item[1], item[2], item[3], item[4], item[5], item[6]});
-    }
-}
+{}
 
 Planner::~Planner(){
     // Empty
+}
+
+void Planner::SetData(const CarData& car, const PrevPathData& prev_path, const std::vector<SensorFusionItem>& sensor_fusion)
+{
+    car_ = car;
+    prev_path_ = prev_path;
+    sensor_fusion_ = sensor_fusion;
 }
 
 void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
@@ -66,14 +51,14 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
         {
             current_target_speed_ -= 0.1; //m/s
         }
-    } else if(current_target_speed_ + 0.1 <= max_allowed_speed_) {
+    } else if(current_target_speed_ + 0.1 <= speed_limit_) {
         current_target_speed_ += 0.1;
     }
 
     current_target_speed_ = std::max(current_target_speed_, 0.1); // 
 
-    std::copy(prev_path_x_.begin(), prev_path_x_.end(), std::back_inserter(path_x));
-    std::copy(prev_path_y_.begin(), prev_path_y_.end(), std::back_inserter(path_y));
+    std::copy(prev_path_.x.begin(), prev_path_.x.end(), std::back_inserter(path_x));
+    std::copy(prev_path_.y.begin(), prev_path_.y.end(), std::back_inserter(path_y));
     
     double prev_x = 0;
     double prev_y = 0;
@@ -81,18 +66,18 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
     double origin_y = 0;
     double origin_yaw = 0;
 
-    double prev_path_size = (int)prev_path_x_.size();
+    double prev_path_size = prev_path_.size();
     if(prev_path_size < 2) {
-        prev_x = car_x_ - std::cos(car_yaw_);
-        prev_y = car_y_ - std::sin(car_yaw_);
-        origin_x = car_x_;
-        origin_y = car_y_;
-        origin_yaw = car_yaw_;
+        prev_x = car_.x - std::cos(car_.yaw);
+        prev_y = car_.y - std::sin(car_.yaw);
+        origin_x = car_.x;
+        origin_y = car_.y;
+        origin_yaw = car_.yaw;
     } else {
-        prev_x = prev_path_x_[prev_path_size-2];
-        prev_y = prev_path_y_[prev_path_size-2];
-        origin_x = prev_path_x_[prev_path_size-1];
-        origin_y = prev_path_y_[prev_path_size-1];
+        prev_x = prev_path_.x[prev_path_size-2];
+        prev_y = prev_path_.y[prev_path_size-2];
+        origin_x = prev_path_.x[prev_path_size-1];
+        origin_y = prev_path_.y[prev_path_size-1];
         origin_yaw = std::atan2(origin_y-prev_y, origin_x-prev_x);
     }
 
@@ -129,7 +114,7 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
 
 bool Planner::IsThereACarInFrontOfUs(int lane, bool strict) const
 {
-    double origin_s = (int)prev_path_x_.size() > 0 ? prev_path_end_s_ : car_s_;
+    double origin_s = prev_path_.size() > 0 ? prev_path_.end_s : car_.s;
 
     for(const SensorFusionItem& item: sensor_fusion_)
     {
@@ -138,7 +123,7 @@ bool Planner::IsThereACarInFrontOfUs(int lane, bool strict) const
             double other_car_speed = std::sqrt(item.vx * item.vx + item.vy * item.vy);
             double other_car_s = item.s; 
             // project to future
-            other_car_s += (double)prev_path_x_.size() * other_car_speed / points_per_sec_;
+            other_car_s += (double)prev_path_.size() * other_car_speed / points_per_sec_;
             double safety_zone = strict ? 10 : 0;
             if(other_car_s >= origin_s - safety_zone && other_car_s <= origin_s + 30)
             { // TODO ezt majd modulo kell számolni

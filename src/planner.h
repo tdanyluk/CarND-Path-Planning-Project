@@ -4,6 +4,35 @@
 
 class Map;
 
+struct CarData {
+    CarData()
+    : x(0), y(0), s(0), d(0), yaw(0), speed(0)
+    {}
+
+    CarData(double _x, double _y, double _s, double _d, double _yaw, double _speed)
+    : x(_x), y(_y), s(_s), d(_d), yaw(_yaw), speed(_speed)
+    {}
+    
+    double x, y, s, d, yaw, speed; // yaw: rad, speed: m/s
+};
+
+struct PrevPathData {
+    PrevPathData()
+    : x(), y(), end_s(0), end_d(0)
+    {}
+      
+    PrevPathData(const std::vector<double>& _x, const std::vector<double>& _y, double _end_s, double _end_d)
+    : x(_x), y(_y), end_s(_end_s), end_d(_end_d)
+    {}
+        
+    int size() const { return x.size(); }
+
+    std::vector<double> x;
+    std::vector<double> y;
+    double end_s;
+    double end_d;
+};
+
 struct SensorFusionItem {
     int id;
     double x, y, vx, vy, s, d;
@@ -12,41 +41,25 @@ struct SensorFusionItem {
 class Planner
 {
     const Map *map_;
-    double max_allowed_speed_;
+    double speed_limit_;
     int points_per_sec_;
 
-    double car_x_; // meter
-    double car_y_;
-    double car_s_;
-    double car_d_;
-    double car_yaw_; // radian
-    double car_speed_; //? 
-    std::vector<double> prev_path_x_;
-    std::vector<double> prev_path_y_;
-    double prev_path_end_s_;
-    double prev_path_end_d_;
-    // Sensor Fusion Data, a list of all other cars on the same side of the road.
-    std::vector<SensorFusionItem> sensor_fusion_;
-  public:
-    double current_target_speed_; //TODO make private
+    double current_target_speed_;
     int current_target_lane_;
 
+    CarData car_;
+    PrevPathData prev_path_;
+    std::vector<SensorFusionItem> sensor_fusion_;
+public:
     Planner(
         const Map* _map,
-        double _target_speed, // m/s
+        double _speed_limit,
         int _points_per_sec,
-        double _car_x,
-        double _car_y,
-        double _car_s,
-        double _car_d,
-        double _car_yaw,
-        double _car_speed,
-        const std::vector<double>& _prev_path_x,
-        const std::vector<double>& _prev_path_y,
-        double _prev_path_end_s,
-        double _prev_path_end_d,
-        const std::vector<std::vector<double>>& _sensor_fusion
+        double _current_target_speed,
+        int _current_target_lane
     );
+
+    void SetData(const CarData& car, const PrevPathData& prev_path, const std::vector<SensorFusionItem>& sensor_fusion);
 
     void Plan(std::vector<double>& path_x, std::vector<double>& path_y);
 
