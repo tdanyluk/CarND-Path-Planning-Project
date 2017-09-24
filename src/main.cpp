@@ -39,10 +39,7 @@ int main()
 {
 	uWS::Hub h;
 
-	// The max s value before wrapping around the track back to 0
-	// double max_s = 6945.554;
-
-	Map map("../data/highway_map.csv");
+	Map map("../data/highway_map.csv", 6945.554);
 	Planner planner(&map, util::milesPerHourToMetersPerSecond(49.5), 50, 0, 1);
 
 	h.onMessage([&planner](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {

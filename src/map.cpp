@@ -4,9 +4,15 @@
 #include <sstream>
 #include "util.h"
 
-Map::Map(const std::string &file_name_)
+Map::Map(const std::string &_file_name, double max_s_)
+: map_waypoints_x_()
+, map_waypoints_y_()
+, map_waypoints_s_()
+, map_waypoints_dx_()
+, map_waypoints_dy_()
+, max_s_(max_s_)
 {
-    std::ifstream f(file_name_);
+    std::ifstream f(_file_name);
 
     std::string line;
     while (std::getline(f, line))
@@ -119,6 +125,39 @@ PointXY Map::GetXY(const PointSD& sd) const
 	double y = seg_y + d * std::sin(perp_heading);
 
 	return {x, y};
+}
+
+double Map::NormalizeS(double s) const
+{
+    while(s < 0)
+    {
+        s += max_s_;
+    }
+    while(s >= max_s_)
+    {
+        s -= max_s_;
+    }
+    return s;
+}
+
+bool Map::InInterval(double s, double from, double to) const
+{
+    s = NormalizeS(s);
+    from = NormalizeS(from);
+    to = NormalizeS(to);
+
+    if(from < to)
+    {
+        return s >= from && s <= to;
+    } 
+    else if(from == to)
+    {
+        return s == from;
+    }
+    else 
+    {
+        return s <= to || s >= from;
+    }
 }
 
 int Map::ClosestWaypoint(const PointXY& xy) const
