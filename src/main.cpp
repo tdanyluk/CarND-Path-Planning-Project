@@ -43,8 +43,10 @@ int main()
 	// double max_s = 6945.554;
 
 	Map map("../data/highway_map.csv");
+	double cts = 0;
+	int ctl = 1;
 
-	h.onMessage([&map](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
+	h.onMessage([&map, &cts, &ctl](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
 		// "42" at the start of the message means there's a websocket message event.
 		// The 4 signifies a websocket message
 		// The 2 signifies a websocket event
@@ -81,9 +83,15 @@ int main()
 						j[1]["sensor_fusion"]
 					);
 
+					planner.current_target_speed_ = cts;
+					planner.current_target_lane_ = ctl;
+
 					vector<double> next_x_vals;
 					vector<double> next_y_vals;
 					planner.Plan(next_x_vals, next_y_vals);
+
+					cts = planner.current_target_speed_;
+					ctl = planner.current_target_lane_;
 
 					// Define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 					json msgJson;

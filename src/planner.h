@@ -12,7 +12,7 @@ struct SensorFusionItem {
 class Planner
 {
     const Map *map_;
-    double target_speed_;
+    double max_allowed_speed_;
     int points_per_sec_;
 
     double car_x_; // meter
@@ -28,6 +28,9 @@ class Planner
     // Sensor Fusion Data, a list of all other cars on the same side of the road.
     std::vector<SensorFusionItem> sensor_fusion_;
   public:
+    double current_target_speed_; //TODO make private
+    int current_target_lane_;
+
     Planner(
         const Map* _map,
         double _target_speed, // m/s
@@ -45,15 +48,17 @@ class Planner
         const std::vector<std::vector<double>>& _sensor_fusion
     );
 
-    void Plan(std::vector<double>& path_x, std::vector<double>& path_y) const;
+    void Plan(std::vector<double>& path_x, std::vector<double>& path_y);
 
     virtual ~Planner();
 
 private:
+    bool IsThereACarInFrontOfUs(int lane, bool strict = false) const;
+
     void GenerateSpline(
         std::vector<double> ref_points_x, 
         std::vector<double> ref_points_y,
-        int nPointsToGenerate,        
+        int n_points_to_generate,
         double x_origin,
         double y_origin,
         double yaw,

@@ -8,7 +8,7 @@
 
 Planner::Planner(
     const Map* _map,
-    double _target_speed,    
+    double _max_allowed_speed,    
     int _points_per_sec,        
     double _car_x,
     double _car_y,
@@ -22,7 +22,7 @@ Planner::Planner(
     double _prev_path_end_d,
     const std::vector<std::vector<double>>& _sensor_fusion)
 : map_(_map)
-, target_speed_(_target_speed)
+, max_allowed_speed_(_max_allowed_speed)
 , points_per_sec_(_points_per_sec)
 , car_x_(_car_x)
 , car_y_(_car_y)
@@ -35,6 +35,8 @@ Planner::Planner(
 , prev_path_end_s_(_prev_path_end_s)
 , prev_path_end_d_(_prev_path_end_d)
 , sensor_fusion_()
+, current_target_speed_(0)
+, current_target_lane_(1)
 {
     sensor_fusion_.reserve(_sensor_fusion.size());
     for(const std::vector<double>& item : _sensor_fusion) {
@@ -46,10 +48,29 @@ Planner::~Planner(){
     // Empty
 }
 
-void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) const
+void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y)
 {
     path_x = {};
     path_y = {};
+
+    bool danger = IsThereACarInFrontOfUs(current_target_lane_);
+    if(danger) {
+        if(current_target_lane_ >= 1 && !IsThereACarInFrontOfUs(current_target_lane_ - 1, true))
+        {
+            current_target_lane_ -= 1;
+        }
+        else if(current_target_lane_ <= 1 && !IsThereACarInFrontOfUs(current_target_lane_ + 1, true))
+        {
+            current_target_lane_ += 1;
+        } else 
+        {
+            current_target_speed_ -= 0.1; //m/s
+        }
+    } else if(current_target_speed_ + 0.1 <= max_allowed_speed_) {
+        current_target_speed_ += 0.1;
+    }
+
+    current_target_speed_ = std::max(current_target_speed_, 0.1); // 
 
     std::copy(prev_path_x_.begin(), prev_path_x_.end(), std::back_inserter(path_x));
     std::copy(prev_path_y_.begin(), prev_path_y_.end(), std::back_inserter(path_y));
@@ -84,11 +105,10 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) con
     ref_points_y.push_back(prev_y);
     ref_points_y.push_back(origin_y);
 
-    const int lane = 1;    
     PointSD origin_sd = map_->GetSD({origin_x, origin_y}, origin_yaw);
-    PointXY ref_p0 = map_->GetXY({origin_sd.s + 30, 2.0 + 4.0 * lane}); // FIXME magic number
-    PointXY ref_p1 = map_->GetXY({origin_sd.s + 60, 2.0 + 4.0 * lane}); // FIXME magic number
-    PointXY ref_p2 = map_->GetXY({origin_sd.s + 90, 2.0 + 4.0 * lane}); // FIXME magic number
+    PointXY ref_p0 = map_->GetXY({origin_sd.s + 30, 2.0 + 4.0 * current_target_lane_}); // FIXME magic number
+    PointXY ref_p1 = map_->GetXY({origin_sd.s + 60, 2.0 + 4.0 * current_target_lane_}); // FIXME magic number
+    PointXY ref_p2 = map_->GetXY({origin_sd.s + 90, 2.0 + 4.0 * current_target_lane_}); // FIXME magic number
     
     ref_points_x.push_back(ref_p0.x);
     ref_points_x.push_back(ref_p1.x);
@@ -100,17 +120,40 @@ void Planner::Plan(std::vector<double>& path_x, std::vector<double>& path_y) con
 
     std::vector<double> spline_x;
     std::vector<double> spline_y;
-    int nPointsToGenerate = std::max(50-(int)path_x.size(), 1); // FIXME magic number
-    GenerateSpline(ref_points_x, ref_points_y, nPointsToGenerate, origin_x, origin_y, origin_yaw, spline_x, spline_y);
+    int n_points_to_generate = std::max(50-(int)path_x.size(), 1); // FIXME magic number
+    GenerateSpline(ref_points_x, ref_points_y, n_points_to_generate, origin_x, origin_y, origin_yaw, spline_x, spline_y);
 
     std::copy(spline_x.begin(), spline_x.end(), std::back_inserter(path_x));
     std::copy(spline_y.begin(), spline_y.end(), std::back_inserter(path_y));
 }
 
+bool Planner::IsThereACarInFrontOfUs(int lane, bool strict) const
+{
+    double origin_s = (int)prev_path_x_.size() > 0 ? prev_path_end_s_ : car_s_;
+
+    for(const SensorFusionItem& item: sensor_fusion_)
+    {
+        if(item.d >= 4.0 * lane && item.d <= 4.0 * (lane+1))
+        {
+            double other_car_speed = std::sqrt(item.vx * item.vx + item.vy * item.vy);
+            double other_car_s = item.s; 
+            // project to future
+            other_car_s += (double)prev_path_x_.size() * other_car_speed / points_per_sec_;
+            double safety_zone = strict ? 10 : 0;
+            if(other_car_s >= origin_s - safety_zone && other_car_s <= origin_s + 30)
+            { // TODO ezt majd modulo kell számolni
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 void Planner::GenerateSpline(
     std::vector<double> ref_points_x, 
     std::vector<double> ref_points_y,
-    int nPointsToGenerate,
+    int n_points_to_generate,
     double x_origin,
     double y_origin,
     double yaw,
@@ -128,9 +171,9 @@ void Planner::GenerateSpline(
     double target_x = 30;
     double target_y = s(target_y);
     double target_dist = util::distance(0, 0, target_x, target_y);
-    double N =  points_per_sec_ * target_dist / target_speed_;
+    double N =  points_per_sec_ * target_dist / current_target_speed_;
 
-    for(int i = 0; i<=nPointsToGenerate; i++) //
+    for(int i = 0; i<=n_points_to_generate; i++) //
     {
         double x = (i + 1) * target_x / N;
         double y = s(x);
